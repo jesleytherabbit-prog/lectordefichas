@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lector de Fichas</title>
+<style>[hidden]{display:none!important} body{margin:0} img{max-width:100%}</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: herramienta de dos paneles (ficha en texto → JSON), se apila en móvil */
+:root{
+  --bg:#f3f2f6; --panel:#ffffff; --ink:#26222f; --muted:#6c6678; --line:#dcd8e4;
+  --accent:#5b4b8a; --accent-ink:#ffffff; --brass:#a77d2c; --code-bg:#f7f6fa;
+  --ok:#2f7a55; --warn:#a2601b; --warn-bg:#fbf1e4;
+  --f-display:"Cinzel", "Trajan Pro", Georgia, serif;
+  --f-body:"Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --f-mono:"JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#17151d; --panel:#211e2a; --ink:#ebe7f2; --muted:#a39db0; --line:#36313f;
+  --accent:#a593e0; --accent-ink:#17151d; --brass:#d6ad5c; --code-bg:#1b1923;
+  --ok:#6fcf9d; --warn:#e7a960; --warn-bg:#2d2419; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#17151d; --panel:#211e2a; --ink:#ebe7f2; --muted:#a39db0; --line:#36313f;
+  --accent:#a593e0; --accent-ink:#17151d; --brass:#d6ad5c; --code-bg:#1b1923;
+  --ok:#6fcf9d; --warn:#e7a960; --warn-bg:#2d2419; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--f-body);padding:24px 16px 40px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line);padding-bottom:14px}
+h1{font:700 clamp(22px,4vw,30px)/1.1 var(--f-display);letter-spacing:.06em;margin:0;text-wrap:balance}
+h1 span{color:var(--brass)}
+.sub{color:var(--muted);margin:6px 0 0;max-width:62ch}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media (max-width:820px){.grid{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;min-width:0}
+.ph{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line)}
+.ph h2{font:600 12px/1 var(--f-body);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0}
+textarea{width:100%;min-height:460px;border:0;resize:vertical;background:transparent;color:var(--ink);font:13px/1.55 var(--f-mono);padding:14px;outline:none}
+textarea:focus-visible{box-shadow:inset 0 0 0 2px var(--accent)}
+pre{margin:0;padding:14px;min-height:460px;max-height:640px;overflow:auto;background:var(--code-bg);font:12.5px/1.55 var(--f-mono);border-radius:0 0 10px 10px;white-space:pre}
+.k{color:var(--accent)} .s{color:var(--ok)} .n{color:var(--brass)}
+.btns{display:flex;flex-wrap:wrap;gap:6px}
+button{font:600 13px var(--f-body);border-radius:7px;padding:7px 12px;cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button:hover{border-color:var(--accent)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button[disabled]{opacity:.55;cursor:wait}
+.toggle{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+.tabs{display:flex;gap:2px}
+.tabs button{border-radius:6px;padding:5px 10px;font-size:12px}
+.tabs button[aria-selected="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.status{font-size:13px;color:var(--muted);padding:10px 14px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:6px 14px}
+.status b{color:var(--ink);font-variant-numeric:tabular-nums}
+.avisos{margin:0;padding:10px 14px 12px 32px;background:var(--warn-bg);color:var(--warn);font-size:13px;border-top:1px solid var(--line)}
+.resumen{padding:14px;display:flex;flex-direction:column;gap:16px;min-height:460px;max-height:640px;overflow:auto}
+.pj h3{font:700 17px var(--f-display);letter-spacing:.04em;margin:0 0 8px}
+.attrs{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:6px}
+.attr{border:1px solid var(--line);border-radius:7px;padding:6px 8px;display:flex;justify-content:space-between;font-size:13px}
+.attr b{font-variant-numeric:tabular-nums;color:var(--brass)}
+.hab{font-size:13px;color:var(--muted);margin-top:8px;columns:2 180px;column-gap:18px}
+.hab div{break-inside:avoid;display:flex;justify-content:space-between;gap:8px;border-bottom:1px dotted var(--line);padding:2px 0}
+.hab div span:last-child{color:var(--ink);font-variant-numeric:tabular-nums}
+.how{font-size:14px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.how h2{font:600 12px/1 var(--f-body);letter-spacing:.12em;text-transform:uppercase;margin:0 0 8px;color:var(--ink)}
+.how ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+.how code{font:12.5px var(--f-mono);background:var(--code-bg);padding:1px 5px;border-radius:4px;color:var(--ink)}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+</style>
+<style>
+.counts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{font-size:12px;border:1px solid var(--line);border-radius:999px;padding:2px 9px;color:var(--muted)}
+.chip b{color:var(--ink);font-variant-numeric:tabular-nums}
+#codigo{white-space:pre-wrap;word-break:break-all}
+.opts{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Lector de <span>Fichas</span></h1>
+      <p class="sub">Pegá la ficha tal como está en el foro (texto copiado). Sale en JSON o como código corto para cargar en otras herramientas. También podés pegar un código <code>AVK1.</code> para volver a ver la ficha.</p>
+    </div>
+    <div class="btns">
+      <button id="btn-limpiar" type="button">Vaciar</button>
+      <button id="btn-ejemplo" type="button">Cargar ejemplo</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="panel" aria-label="Ficha en texto">
+      <div class="ph"><h2>Ficha (texto o código)</h2>
+      </div>
+      <textarea id="entrada" spellcheck="false" placeholder="IRVIN GILES&#10;{Atributos»&#10;→ Vigor: 4&#10;..."></textarea>
+      <div class="status" id="status"></div>
+    </section>
+
+    <section class="panel" aria-label="Resultado">
+      <div class="ph">
+        <div class="tabs" role="tablist">
+          <button id="tab-json" type="button" role="tab" aria-selected="true">JSON</button>
+          <button id="tab-cod" type="button" role="tab" aria-selected="false">Código</button>
+          <button id="tab-res" type="button" role="tab" aria-selected="false">Resumen</button>
+        </div>
+        <div class="opts">
+          <label class="toggle"><input id="descripciones" type="checkbox"> Descripciones</label>
+          <label class="toggle"><input id="compacto" type="checkbox"> Compacto</label>
+          <button id="btn-copiar" type="button" class="primary">Copiar</button>
+        </div>
+      </div>
+      <pre id="salida" tabindex="0"></pre>
+      <pre id="codigo" tabindex="0" hidden></pre>
+      <div class="resumen" id="resumen" hidden></div>
+      <ul class="avisos" id="avisos" hidden></ul>
+    </section>
+  </div>
+
+  <div class="how">
+    <h2>Cómo usarlo en otras herramientas</h2>
+    <ol>
+      <li>Pegá la ficha a la izquierda; el resultado se arma solo. Revisá los avisos (niveles mal sumados, listas incompletas).</li>
+      <li><b>JSON</b> es legible y sirve para revisar. <b>Código</b> es la misma ficha comprimida (empieza con <code>AVK1.</code>): es lo que se pega en el tracker o en la calculadora.</li>
+      <li>“Descripciones” agrega los textos largos (trasfondos, talentos, objetos). Sin ellas el código queda mucho más corto.</li>
+    </ol>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+const EJEMPLO = `CORALINE BASKERVILLE
+
+▋ Atributos: (Límites: ____)
+→ Vigor: 3
+→ Destreza: 2
+→ Carisma: 3
+→ Voluntad: 3
+→ Percepción: 4
+→ Inteligencia: 3
+→ Poder: 4
+
+▋ Habilidades:
+VIGOR:
+→ Atletismo: Competente (+2)
+→ Pelea: Experto (+4)
+DESTREZA:
+→ Esquiva: Experto (+4)
+→ Latrocinio: Desentrenado (+0)
+→ Sigilo: Competente (+2)
+→ Vuelo: Desentrenado (+0)
+CARISMA:
+→ Coordinación: Competente (+2)
+→ Intimidación: Experto (+4)
+→ Oratoria: Desentrenado (+0)
+→ Seducción: Competente (+2)
+→ Subterfugio: Experto (+4)
+VOLUNTAD:
+→ Artesanía (Cocina): Competente (+2)
+→ Arte (Canto): Competente (+2)
+→ Estilo: Desentrenado (+0)
+→ Frialdad: Experto (+4)
+PERCEPCIÓN:
+→ Alerta: Experto (+4)
+→ Consciencia: Experto (+4)
+→ Empatía: Experto (+4)
+→ Iniciativa: Experto (+4)
+→ Investigación: Experto (+4)
+INTELIGENCIA:
+→ Adivinación: Desentrenado (+0)
+→ Arcanismo: Novato (+1)
+→ Callejeo: Desentrenado (+0)
+→ Cultura Mágica: Desentrenado (+0)
+→ Cultura Muggle: Competente (+2)
+→ Herbología: Experto (+4)
+→ Magizoología: Desentrenado (+0)
+→ Medicina: Competente (+2)
+→ Política: Desentrenado (+0)
+→ Supervivencia: Desentrenado (+0)
+PODER:
+→ Duelo: Experto (+4)
+→ Pociones: Competente (+2)
+→ Rituales: Competente (+2)`;
+
+/* ---------- utilidades ---------- */
+const ATRIBUTOS = ["vigor","destreza","carisma","voluntad","percepcion","inteligencia","poder"];
+const NIVELES = {desentrenado:0, novato:1, competente:2, experto:4, maestro:7, legendario:9};
+const ROMANOS = {I:1,II:2,III:3,IV:4,V:5,VI:6,VII:7,VIII:8};
+const $ = id => document.getElementById(id);
+const sinTildes = s => s.normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+const norm = s => sinTildes(s).toLowerCase().replace(/\s+/g," ").trim();
+const slug = s => norm(s).replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+const sinPunto = s => s.replace(/[\s.,;]+$/,"").trim();
+const BULLET = /^(?:→|->|=>|•|●|◦|\*|-(?=\s))\s*/;
+const quitarBB = s => s.replace(/\[\/?[a-z]+(?:=[^\]]*)?\]/gi,"");
+const esMayus = l => /[A-ZÁÉÍÓÚÑ]/.test(l) && l === l.toUpperCase();
+
+const SECCIONES = [
+  [/^atributos?\b/, "atributos"], [/^habilidades?\b/, "habilidades"],
+  [/^(acceso rapido|combate)\b/, "combate"],
+  [/^(perdida de )?puntos de (pociones|rituales|destino)/, "puntos"],
+  [/^hechizos?\b/, "hechizos"], [/^pociones\b/, "pociones"], [/^rituales\b/, "rituales"],
+  [/^objetos?\b/, "objetos"], [/^(los )?trasfondos?\b/, "trasfondos"], [/^ventajas\b/, "ventajas"],
+  [/^raza\b/, "raza"], [/^idiomas?\b/, "idiomas"], [/^especializacion(es)?\b/, "especializaciones"],
+  [/^talentos\b/, "talentos"], [/^titulos?\b/, "titulos"], [/^proezas\b/, "proezas"], [/^otros\b/, "otros"]
+];
+function cabecera(texto){
+  const cabeza = norm(texto).split(/[:|(]/)[0].trim();
+  for(const [re, sec] of SECCIONES) if(re.test(cabeza)) return {sec, cabeza};
+  return null;
+}
+function subcategoria(sec, cabeza){
+  if(sec === "idiomas") return /muggle/.test(cabeza) ? "muggles" : /magic/.test(cabeza) ? "magicos" : "otros";
+  if(/domestic/.test(cabeza)) return "domesticos";
+  if(/basic/.test(cabeza)) return "basicos";
+  if(/intermedi/.test(cabeza)) return "intermedios";
+  if(/avanzad/.test(cabeza)) return "avanzados";
+  if(/cumplea/.test(cabeza)) return "cumpleanos";
+  return null;
+}
+
+function parseNivel(v){
+  v = sinPunto(v);
+  const m = v.match(/^([A-Za-zÁÉÍÓÚáéíóúñÑ]+)\s*\(?\s*([+-]?\d+)?\s*\)?$/);
+  if(!m) return null;
+  const n = slug(m[1]);
+  if(!(n in NIVELES)) return null;
+  return {nivel: cap(m[1]), bono: m[2] !== undefined ? parseInt(m[2],10) : NIVELES[n], esperado: NIVELES[n]};
+}
+
+/* hechizo, poción, ritual u objeto: "Nombre | Latín. Requiere X." o "Nombre: descripción" */
+function parseConocimiento(b){
+  b = sinPunto(b);
+  const o = {};
+  const d = b.match(/^([^:.]{1,60}):\s+([\s\S]{15,})$/);
+  if(d){ o.nombre = d[1].trim(); o.descripcion = d[2].trim(); }
+  else {
+    const partes = b.split(/\.\s*Requiere\s+/i);
+    o.nombre = sinPunto(partes[0]);
+    if(partes[1]) o.requiere = sinPunto(partes[1]);
+  }
+  if(o.nombre.includes("|")){ const [a, l] = o.nombre.split("|"); o.nombre = a.trim(); o.latin = l.trim(); }
+  return o;
+}
+
+function parseTalento(b){
+  b = sinPunto(b);
+  const x = b.match(/^(.+?)\s*\(\s*x\s*(\d+)\s*\)$/i);
+  if(x) return {nombre: x[1].trim(), cantidad: parseInt(x[2],10)};
+  const i = b.indexOf(":");
+  if(i <= 0 || i > 50) return {nombre: b};
+  const o = {nombre: b.slice(0,i).trim()};
+  let resto = b.slice(i+1).trim();
+  const primera = resto.split(/\.\s+/)[0];
+  if(/^requiere\s/i.test(primera)){ o.requiere = sinPunto(primera.replace(/^requiere\s+/i,"")); resto = resto.slice(primera.length).replace(/^\.\s*/,""); }
+  else if(primera.length <= 30){ o.detalle = sinPunto(primera); resto = resto.slice(primera.length).replace(/^\.\s*/,""); }
+  if(resto) o.descripcion = resto;
+  return o;
+}
+
+const pareceCategoria = s => {
+  const p = s.trim().split(/\s+/);
+  return p.length <= 9 && p.filter(w => w.length > 3).every(w => /^[A-ZÁÉÍÓÚÑ>\/]/.test(w));
+};
+function parseTrasfondo(b, grupo){
+  const m = b.match(/^(Biblioteca|Influencia|Informantes|Seguidores)\s+([IVX]+)\b\s*(?:\(([^)]+)\))?\s*[:.]?\s*([\s\S]*)$/i);
+  if(!m) return {grupo, texto: sinPunto(b)};
+  let [, tipo, rom, identidad, resto] = m, categoria = null;
+  const c = resto.match(/^([^.,:]{1,70}?)\s*(?:\(([^)]+)\))?\s*\.\s*([\s\S]*)$/);
+  if(c && c[1].trim() && pareceCategoria(c[1])){ categoria = c[1].trim(); identidad = identidad || c[2]; resto = c[3]; }
+  const o = {tipo: cap(tipo), nivel: ROMANOS[rom.toUpperCase()] ?? rom};
+  if(/^biblioteca$/i.test(tipo)){
+    const [g, e] = (categoria || "").split(">").map(s => s.trim());
+    o.general = g || null; if(e) o.especifica = e;
+  } else {
+    o.general = grupo || null;
+    if(categoria){ const [g, e] = categoria.split(">").map(s => s.trim()); if(e){ o.general = g; o.especifica = e; } else o.especifica = g; }
+  }
+  if(identidad) o.identidad = identidad.trim();
+  if(resto.trim()) o.descripcion = resto.trim();
+  return o;
+}
+function parseVentaja(b){
+  const m = b.match(/^(Fama|Orden de Merl[ií]n|Patr[oó]n|Recursos)[\s,]+([^:]+?)\s*:\s*([\s\S]*)$/i);
+  if(!m){ const i = b.indexOf(":"); return {nombre: sinPunto(i > 0 ? b.slice(0,i) : b)}; }
+  const niv = m[2].trim();
+  const o = {nombre: m[1], nivel: ROMANOS[niv.toUpperCase()] ?? niv};
+  if(m[3].trim()) o.descripcion = m[3].trim();
+  return o;
+}
+function parseIdioma(b){
+  const i = b.indexOf(":");
+  const o = {idioma: (i > 0 ? b.slice(0,i) : b).trim()};
+  if(i > 0){
+    const resto = b.slice(i+1).trim();
+    const n = resto.match(/^nivel\s+([^.]+)\.?\s*([\s\S]*)$/i);
+    if(n){ o.nivel = n[1].trim(); if(n[2]) o.descripcion = n[2].trim(); }
+    else o.descripcion = resto;
+  }
+  return o;
+}
+function parseTitulo(b){
+  b = sinPunto(b);
+  const i = b.indexOf(":");
+  if(i < 0) return {examen: b};
+  const o = {examen: b.slice(0,i).trim()};
+  const resto = b.slice(i+1).trim(), p = resto.lastIndexOf(". ");
+  if(p > 0){ o.materia = resto.slice(0,p).trim(); o.calificacion = resto.slice(p+2).trim(); }
+  else o.calificacion = resto;
+  return o;
+}
+
+/* ---------- parser principal ---------- */
+function nuevaFicha(nombre){
+  return {personaje: nombre || "", raza: null, limites: null, atributos: {}, talentosos: [], habilidades: {}, bonos: {},
+    combate: {}, puntos: {}, especializaciones: {}, hechizos: {}, pociones: {}, rituales: {}, objetos: {},
+    talentos: {}, trasfondos: [], ventajas: [], idiomas: {}, titulos: [], proezas: [], extra: {}, _avisos: [], _esperados: {}};
+}
+
+function parsear(texto){
+  const lineas = texto.replace(/\r/g,"").split("\n");
+  const fichas = [];
+  let f = null, sec = null, sub = null, grupo = null;
+  const asegurar = () => { if(!f){ f = nuevaFicha(""); fichas.push(f); } };
+  const lista = (obj, k) => (obj[k] ||= []);
+
+  for(let raw of lineas){
+    let l = quitarBB(raw).replace(/\u00a0/g," ").trim();
+    if(!l) continue;
+    const marcada = /^[▋{]/.test(l);
+    l = l.replace(/^[▋{]\s*/,"").replace(/»\s*$/,"").trim();
+    if(!l) continue;
+    let bullet = BULLET.test(l);
+
+    if(!bullet){
+      const cab = cabecera(l);
+      const cabeza = norm(l).split(/[:(|]/)[0].trim();
+      // nombre del personaje
+      if(!marcada && !cab && esMayus(l) && !/:\s*$/.test(l) && !ATRIBUTOS.includes(slug(cabeza)) && l.length <= 60){
+        f = nuevaFicha(l.split(/\s+/).map(cap).join(" ")); fichas.push(f); sec = sub = grupo = null; continue;
+      }
+      asegurar();
+      // grupo de habilidades: "VIGOR (T):"
+      if(ATRIBUTOS.includes(slug(cabeza)) && esMayus(l.split(/[:(]/)[0]) && (!sec || sec === "habilidades")){
+        sec = "habilidades"; grupo = slug(cabeza);
+        if(/\(\s*T\s*\)/i.test(l) && !f.talentosos.includes(grupo)) f.talentosos.push(grupo);
+        continue;
+      }
+      if(cab){
+        const despues = l.includes(":") ? l.slice(l.indexOf(":")+1).trim() : "";
+        if(cab.sec === "puntos"){
+          const clave = /perdida/.test(cab.cabeza) ? "perdida_destino" : cab.cabeza.match(/puntos de (\w+)/)[1];
+          const nums = despues.includes("=") ? despues.split("=").pop().match(/-?\d+/) : despues.match(/-?\d+/);
+          f.puntos[clave] = nums ? parseInt(nums[0],10) : null;
+          continue;
+        }
+        sec = cab.sec; sub = subcategoria(sec, cab.cabeza); grupo = null;
+        const esperado = l.match(/\|\s*(\d+)/);
+        if(esperado && sub) f._esperados[sec + "." + sub] = parseInt(esperado[1],10);
+        if(sec === "atributos"){ const lim = l.match(/L[ií]mites?\s*:\s*([^)]*)\)/i); if(lim && !/^_*$/.test(lim[1].trim())) f.limites = lim[1].trim(); }
+        if(despues && BULLET.test(despues)){ l = despues; bullet = true; }  // "▋ RAZA: → Metamorfomago: ..."
+        else continue;
+      } else if(sec === "titulos"){
+        // las líneas de títulos no llevan viñeta
+      } else {
+        if(sec && !["atributos","habilidades"].includes(sec) && !/\/.*\(\+\d\)/.test(l)) lista(f.extra, sec).push(l);
+        continue;
+      }
+    }
+
+    asegurar();
+    let cuerpo = l.replace(BULLET,"").trim();
+    // subgrupo con viñeta: "• Bibliotecas:", "• Talentos Generales:", "• Carisma:"
+    if(bullet && /:\s*$/.test(cuerpo) && cuerpo.length < 45){
+      const t = sinPunto(cuerpo.replace(/:\s*$/,""));
+      if(sec === "talentos") sub = slug(t.replace(/^talentos?\s+/i,""));
+      else if(sec === "proezas") grupo = slug(t);
+      else grupo = t;
+      continue;
+    }
+
+    const i = cuerpo.indexOf(":");
+    const clave = i > 0 ? cuerpo.slice(0,i).trim() : sinPunto(cuerpo);
+    const valor = i > 0 ? sinPunto(cuerpo.slice(i+1)) : "";
+
+    switch(sec || "otros"){
+      case "atributos": {
+        if(/^l[ií]mites?/i.test(clave)){ f.limites = valor; break; }
+        const ka = slug(clave.replace(/\(\s*T\s*\)/i,""));
+        if(/\(\s*T\s*\)/i.test(clave) && !f.talentosos.includes(ka)) f.talentosos.push(ka);
+        const n = parseInt(valor.replace(/[^\d-]/g,""),10);
+        if(!isNaN(n)) f.atributos[ka] = n;
+        break;
+      }
+      case "habilidades": {
+        if(/_{2,}/.test(clave) && /\+0|desentrenado/i.test(valor)) break;
+        const nv = parseNivel(valor);
+        const k = slug(clave.replace(/arte\s*\/\s*artesan[ií]a/i,"artesania"));
+        const g = grupo || "otras";
+        (f.habilidades[g] ||= {});
+        if(nv){
+          f.habilidades[g][k] = {nombre: clave.replace(/\s+/g," "), nivel: nv.nivel, bono: nv.bono};
+          f.bonos[k] = nv.bono;
+          if(nv.bono !== nv.esperado) f._avisos.push(`${clave}: ${nv.nivel} figura con +${nv.bono}; en el sistema es +${nv.esperado}.`);
+        } else {
+          f.habilidades[g][k] = {nombre: clave, nivel: valor || null, bono: null};
+          f._avisos.push(`${clave}: no se reconoció el nivel "${valor}".`);
+        }
+        break;
+      }
+      case "combate": {
+        const n = valor.match(/-?\d+/);
+        f.combate[slug(clave)] = n ? parseInt(n[0],10) : valor;
+        break;
+      }
+      case "hechizos": case "pociones": case "rituales": case "objetos":
+        lista(f[sec], sub || "otros").push(parseConocimiento(cuerpo)); break;
+      case "trasfondos":
+        if(grupo && /^ventajas?$/i.test(grupo)) f.ventajas.push(parseVentaja(cuerpo));
+        else f.trasfondos.push(parseTrasfondo(cuerpo, grupo));
+        break;
+      case "ventajas": f.ventajas.push(parseVentaja(cuerpo)); break;
+      case "raza": f.raza = valor ? {nombre: clave, descripcion: valor} : {nombre: clave}; break;
+      case "idiomas": lista(f.idiomas, sub || "otros").push(parseIdioma(sinPunto(cuerpo))); break;
+      case "especializaciones": {
+        const m = sinPunto(cuerpo).match(/^(.+?)\s+(\d+)$/);
+        if(m){ const k = slug(m[1]); f.especializaciones[k] = Math.max(f.especializaciones[k] || 0, parseInt(m[2],10)); }
+        else f.especializaciones[slug(cuerpo)] = f.especializaciones[slug(cuerpo)] || 1;
+        break;
+      }
+      case "talentos": lista(f.talentos, sub || "otros").push(parseTalento(cuerpo)); break;
+      case "titulos": f.titulos.push(parseTitulo(cuerpo)); break;
+      case "proezas": {
+        const o = {atributo: grupo || null, habilidad: clave};
+        if(valor) o.descripcion = valor;
+        f.proezas.push(o); break;
+      }
+      default: lista(f.extra, sec || "otros").push(i > 0 ? {nombre: clave, valor} : clave);
+    }
+  }
+
+  for(const x of fichas){
+    const faltan = ATRIBUTOS.filter(a => !(a in x.atributos));
+    if(!Object.keys(x.atributos).length) x._avisos.push("No se encontraron atributos.");
+    else if(faltan.length) x._avisos.push(`Faltan atributos: ${faltan.join(", ")}.`);
+    if(!x.personaje) x._avisos.push("Sin nombre: poné el nombre en MAYÚSCULAS en la primera línea.");
+    for(const [k, n] of Object.entries(x._esperados)){
+      const [s, sb] = k.split(".");
+      const real = (x[s]?.[sb] || []).length;
+      if(real !== n) x._avisos.push(`${cap(s)} ${sb}: el encabezado dice ${n} y se leyeron ${real}.`);
+    }
+  }
+  return fichas;
+}
+
+/* ---------- salida ---------- */
+const ORDEN = ["personaje","raza","limites","atributos","talentosos","habilidades","bonos","combate","puntos","especializaciones",
+  "hechizos","pociones","rituales","objetos","talentos","trasfondos","ventajas","idiomas","titulos","proezas","extra"];
+const vacio = v => v == null || (Array.isArray(v) ? !v.length : typeof v === "object" && !Object.keys(v).length);
+function limpiar(f){
+  const o = {};
+  for(const k of ORDEN) if(k === "personaje" || !vacio(f[k])) o[k] = f[k];
+  return o;
+}
+const conDesc = () => $("descripciones").checked;
+const replacer = (k, v) => (k === "descripcion" && !conDesc()) ? undefined : v;
+
+function resaltar(json){
+  return json.replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))
+    .replace(/("(?:\\.|[^"\\])*")(\s*:)?|\b(-?\d+)\b/g, (m, str, colon, num) => {
+      if(str) return colon ? `<span class="k">${str}</span>${colon}` : `<span class="s">${str}</span>`;
+      return `<span class="n">${num}</span>`;
+    });
+}
+
+/* código: JSON comprimido (deflate) en base64url con prefijo AVK1. */
+const b64url = bytes => { let s = ""; bytes.forEach(b => s += String.fromCharCode(b)); return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); };
+const desdeB64url = t => { const s = atob(t.replace(/-/g,"+").replace(/_/g,"/")); return Uint8Array.from(s, c => c.charCodeAt(0)); };
+async function codificar(json){
+  const datos = new TextEncoder().encode(json);
+  if(typeof CompressionStream === "undefined") return "AVK0." + b64url(datos);
+  const buf = await new Response(new Blob([datos]).stream().pipeThrough(new CompressionStream("deflate-raw"))).arrayBuffer();
+  return "AVK1." + b64url(new Uint8Array(buf));
+}
+async function decodificar(codigo){
+  const [pre, cuerpo] = codigo.trim().split(".");
+  const bytes = desdeB64url(cuerpo);
+  if(pre === "AVK0") return JSON.parse(new TextDecoder().decode(bytes));
+  const buf = await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer();
+  return JSON.parse(new TextDecoder().decode(buf));
+}
+
+let ultimoJSON = "", ultimoCodigo = "", ultimasFichas = [], tabActual = "json", ronda = 0;
+async function render(fichasCrudas, fuente){
+  ultimasFichas = fichasCrudas;
+  const datos = fichasCrudas.map(limpiar);
+  const obj = datos.length === 1 ? datos[0] : datos;
+  ultimoJSON = datos.length ? JSON.stringify(obj, replacer, $("compacto").checked ? 0 : 2) : "";
+  $("salida").innerHTML = ultimoJSON ? resaltar(ultimoJSON) : '<span style="color:var(--muted)">Pegá una ficha para ver el JSON.</span>';
+
+  const avisos = fichasCrudas.flatMap(f => (f._avisos || []).map(a => (fichasCrudas.length > 1 && f.personaje ? f.personaje + " · " : "") + a));
+  const ul = $("avisos"); ul.innerHTML = "";
+  avisos.forEach(a => { const li = document.createElement("li"); li.textContent = a; ul.appendChild(li); });
+  ul.hidden = !avisos.length;
+
+  const nHab = fichasCrudas.reduce((t,f) => t + Object.keys(f.bonos || {}).length, 0);
+  $("status").innerHTML = datos.length
+    ? `<span>Fichas: <b>${datos.length}</b></span><span>Habilidades: <b>${nHab}</b></span><span>Avisos: <b>${avisos.length}</b></span>${fuente ? `<span>${fuente}</span>` : ""}`
+    : "<span>Esperando una ficha.</span>";
+
+  renderResumen(fichasCrudas);
+
+  const mia = ++ronda;
+  ultimoCodigo = "";
+  $("codigo").textContent = ultimoJSON ? "Generando…" : "Pegá una ficha para generar el código.";
+  if(ultimoJSON){
+    const cod = await codificar(JSON.stringify(obj, replacer));
+    if(mia !== ronda) return;
+    ultimoCodigo = cod;
+    $("codigo").textContent = cod;
+  }
+}
+
+function contar(o){ return o ? Object.values(o).reduce((t, v) => t + (Array.isArray(v) ? v.length : 0), 0) : 0; }
+function renderResumen(fichas){
+  const r = $("resumen"); r.innerHTML = "";
+  fichas.forEach(f => {
+    const d = document.createElement("div"); d.className = "pj";
+    const h = document.createElement("h3"); h.textContent = (f.personaje || "(sin nombre)") + (f.raza?.nombre ? " · " + f.raza.nombre : ""); d.appendChild(h);
+    const at = document.createElement("div"); at.className = "attrs";
+    Object.entries(f.atributos || {}).forEach(([k,v]) => {
+      const c = document.createElement("div"); c.className = "attr"; c.innerHTML = "<span></span><b></b>";
+      c.firstChild.textContent = cap(k) + ((f.talentosos || []).includes(k) ? " (T)" : ""); c.lastChild.textContent = v; at.appendChild(c);
+    });
+    d.appendChild(at);
+    const cuentas = [["Hechizos", contar(f.hechizos)], ["Pociones", contar(f.pociones)], ["Rituales", contar(f.rituales)],
+      ["Objetos", contar(f.objetos)], ["Talentos", contar(f.talentos)], ["Trasfondos", (f.trasfondos || []).length],
+      ["Ventajas", (f.ventajas || []).length], ["Idiomas", contar(f.idiomas)], ["Especializaciones", Object.keys(f.especializaciones || {}).length],
+      ["Proezas", (f.proezas || []).length]].filter(([, n]) => n);
+    if(cuentas.length){
+      const cc = document.createElement("div"); cc.className = "counts";
+      cuentas.forEach(([t, n]) => { const s = document.createElement("span"); s.className = "chip"; s.innerHTML = "<span></span> <b></b>"; s.firstChild.textContent = t; s.lastChild.textContent = n; cc.appendChild(s); });
+      d.appendChild(cc);
+    }
+    const hb = document.createElement("div"); hb.className = "hab";
+    Object.values(f.habilidades || {}).forEach(g => Object.values(g).forEach(x => {
+      if(!x.bono) return;
+      const row = document.createElement("div"); row.innerHTML = "<span></span><span></span>";
+      row.firstChild.textContent = x.nombre; row.lastChild.textContent = `${x.nivel} +${x.bono}`; hb.appendChild(row);
+    }));
+    d.appendChild(hb); r.appendChild(d);
+  });
+}
+
+async function procesar(){
+  const texto = $("entrada").value;
+  try{ localStorage.setItem("lector-fichas-borrador", texto); }catch(e){}
+  if(/^\s*AVK[01]\.[A-Za-z0-9_-]+\s*$/.test(texto)){
+    try{
+      const d = await decodificar(texto);
+      const lista = (Array.isArray(d) ? d : [d]).map(x => ({...x, _avisos: []}));
+      render(lista, "Leída desde código");
+    }catch(e){ render([]); toast("El código está incompleto o dañado"); }
+    return;
+  }
+  render(parsear(texto));
+}
+
+let t; $("entrada").addEventListener("input", () => { clearTimeout(t); t = setTimeout(procesar, 250); });
+$("compacto").addEventListener("change", () => render(ultimasFichas));
+$("descripciones").addEventListener("change", () => render(ultimasFichas));
+$("btn-ejemplo").addEventListener("click", () => { $("entrada").value = EJEMPLO; procesar(); });
+$("btn-limpiar").addEventListener("click", () => { $("entrada").value = ""; procesar(); $("entrada").focus(); });
+
+function tab(cual){
+  tabActual = cual;
+  [["json","tab-json","salida"],["cod","tab-cod","codigo"],["res","tab-res","resumen"]].forEach(([k, b, p]) => {
+    $(b).setAttribute("aria-selected", k === cual); $(p).hidden = k !== cual;
+  });
+  $("btn-copiar").textContent = cual === "cod" ? "Copiar código" : "Copiar JSON";
+}
+$("tab-json").addEventListener("click", () => tab("json"));
+$("tab-cod").addEventListener("click", () => tab("cod"));
+$("tab-res").addEventListener("click", () => tab("res"));
+
+function toast(msg){ const el = $("toast"); el.textContent = msg; el.classList.add("show"); setTimeout(() => el.classList.remove("show"), 1800); }
+$("btn-copiar").addEventListener("click", () => {
+  const esCodigo = tabActual === "cod";
+  const texto = esCodigo ? ultimoCodigo : ultimoJSON;
+  if(!texto){ toast("Todavía no hay nada para copiar"); return; }
+  navigator.clipboard.writeText(texto).then(() => toast(esCodigo ? "Código copiado" : "JSON copiado")).catch(() => {
+    if(!esCodigo) tab("json");
+    const sel = window.getSelection(), rg = document.createRange();
+    rg.selectNodeContents($(esCodigo ? "codigo" : "salida")); sel.removeAllRanges(); sel.addRange(rg);
+    toast("Seleccionado: copialo con Ctrl+C");
+  });
+});
+
+
+let inicial = null; try{ inicial = localStorage.getItem("lector-fichas-borrador"); }catch(e){}
+$("entrada").value = inicial || EJEMPLO;
+procesar();
+</script>
+</body>
+</html>
